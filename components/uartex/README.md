@@ -1,28 +1,61 @@
-## uartex
-```
-packet) 0x02 0x01 0x00 0x00 0x00 (add)checksum 0x0D 0x0A
+[![latest version](https://img.shields.io/github/release/eigger/espcomponents?display_name=tag&include_prereleases&label=latest%20version)](https://github.com/eigger/espcomponents/releases)
+# Read and Parse UART Data in ESPHome
 
+
+ESPHome has been able to send data to a device via the UART using the [ESPHome UART Bus component](https://esphome.io/components/uart.html). However, reading data sent back from the device has been complicated. This either involved creating a custom component (which is now [not possible](https://esphome.io/guides/contributing.html#a-note-about-custom-components)) or using a [hack in the debug logging system](https://community.home-assistant.io/t/how-to-uart-read-without-custom-component/491950).
+
+
+This ESPHome external component makes it easy to read UART data from a device. It also allows for the data it to be filtered, extracted and formatted as ESPHome sensor values. It can optionally then send data back to the device.
+
+You can include this ESPHome external component with the following:
+```
+external_components:
+  - source: github://eigger/espcomponents/releases/latest
+    components: [ uartex ]
+    refresh: 1day
+```
+
+The component performs the following loop read/match/process/reply:
+
+1) Read in bytes from a device via the UART until the end of data block is detected.
+2) If the header matches, it then passes the block received to all the sensors that have been configured to process the data block.
+3) If configured, it then sends bytes back to the device via the UART.
+
+The end of a block is detected when any of the following occur:
+
+1) If `rx_cheksum:` is specified, then a CRC is calculated after each byte is received and if it matches in the data then reading stops. This method is convenient but might be caught out by a false match in the data.
+2) If `rx_length` is specified it will stop reading after the specified number of bytes have been read.
+3) Or if `rx_timeout` has been reached it will stop and then process the block. While reading in the block this component will be blocking, this may cause warnings if the timeout is greater than 30mSec
+
+
+For the read part of the loop this diagram shows the flow, this example uses the `rx_checksum` method to detect the end of a block of data:
+
+![read data flow](docs/uartex_drawing.png)
+
+
+# Base uartex set up
+
+The read/match/process/reply loop is configured in the `uartex:` section of configuration.
+
+```
+# Example configuration entry
 uartex:
   rx_timeout: 10ms
   tx_delay: 50ms
   tx_timeout: 500ms
   tx_retry_cnt: 3
 
-  rx_header: [0x02, 0x01] or "\x02\x01"
-  rx_footer: [0x0D, 0x0A] or "\r\n"
-  tx_header: [0x02, 0x01] or "\x02\x01"
-  tx_footer: [0x0D, 0x0A] or "\r\n"
+  rx_header: [0x02, 0x01]
+  rx_header_mask: [0xFF, 0xFF]
+
+  rx_footer: [0x0D, 0x0A]
+  tx_header: "\x02\x01"
+  tx_footer: "\r\n"
 
   rx_checksum: add
   tx_checksum: add
-
-  version:
-    disabled: False
-  error:
-    disabled: False
-  log:
-    disabled: False
 ```
+<<<<<<< Updated upstream
 ### Configuration variables
 - rx_timeout (Optional, Time): Data Receive Timeout. Defaults to 10ms. Max 2000ms
 - rx_length (Optional, int): The length of the received data when the data length is fixed. Max 256
@@ -50,52 +83,128 @@ uartex:
 - error (Optional): Error of Uartex
 - log (Optional): Log of Uartex
 <hr/>
+=======
+>>>>>>> Stashed changes
 
-## State Schema
+## Configuration variables:
+
+- **rx_timeout** *(Optional, [Time](https://esphome.io/guides/configuration-types#config-time))*: Data Receive Timeout. Defaults to 10ms. Max 2000ms
+- **rx_length** *(Optional, int)*: The length of the received data, to use when the data length is fixed. Max 256
+
+- **rx_checksum** *(Optional, enum, lambda)*: Checksum method for received data. Possible options are:
+  - **add** - use additive CRC calculation
+  - **xor** - use xor CRC calculation
+  - **lambda** - you can specify your own CRC calculation, such as this:
+    ```
+    rx_checksum: !lambda |-
+      uint32_t crc = 0x02 + 0x01;
+      for (int i = 0; i < len; i++)
+      {
+        crc += data[i];           # data(0) is the first byte of data after the header.
+      }
+      return crc & 0x00FF;
+    ```
+  - uint8_t = (uint8_t* data, uint16_t len) :shrug:
+- **rx_checksum2** *(Optional, enum or lambda)*: Checksum array of Data to be Received. (add, xor) :shrug:
+  - vector\<uint8_t\> = (uint8_t* data, uint16_t len) :shrug:
+
+- **rx_header** *(Optional, array)*: Header data required to match in data stream for processing to take place, if no match this data block is ignored.
+- **rx_header_mask** *(Optional, array)*: Mask for received header data
+
+- **rx_footer** *(Optional, array)*: Footer of Data to be Received
+
+- **tx_delay** *(Optional, Time)* : Delay before data sent back to device. Defaults to 50ms. Max 2000ms
+- **tx_timeout** *(Optional, Time)* : ACK Reception Timeout. Defaults to 50ms. Max 2000ms
+- **tx_retry_cnt** *(Optional, int)* : Retry Count on ACK. Defaults to 3. Max 10
+- **tx_ctrl_pin** *(Optional, gpio)* : Control PIN GPIO
+
+- **tx_header** *(Optional, array)* : Header added to data to be sent.
+- **tx_footer** *(Optional, array)* : Footer added to data to be sent.
+- **tx_checksum** *(Optional, enum, lambda)* : Checksum added to data to be sent (add, xor)
+  - uint8_t = (uint8_t* data, uint16_t len) :shrug:
+- **tx_checksum2** *(Optional, enum or lambda)* : Checksum added to data to be sent (add, xor) :shrug:
+  - vector\<uint8_t\> = (uint8_t* data, uint16_t len) :shrug:
+
+- **on_read** *(Optional, lambda)* : Event when data block read
+  - void = (uint8_t* data, uint16_t len) :shrug:
+- **on_write** *(Optional, lambda)* : Event when data block sent
+  - void = (uint8_t* data, uint16_t len) :shrug:
+- **version** *(Optional)* : Creates a sensor to send version of this component to ESPHome
+- **error** *(Optional)* : Creates a sensor to send error message from this component to ESPHome
+- **log** *(Optional)* : Creates a sensor to send log message from this component to ESPHome
+
+
+
+State Sensor
+============
+
+Not sure what this does !!!!!!! :shrug:
 ```
-packet) 0x02 0x01 0x01 0x02 0x00 (add)checksum 0x0D 0x0A
-offset) head head 0    1    2
-
+# Example configuration entry
 state: 
   data: [0x01, 0x02] or "ascii string"
   mask: [0xff, 0xff] or "ascii string"
   offset: 0
   inverted: False
 ```
-### Configuration variables
-- data (Required, array or string): 
-- mask (Optional, array or string): Defaults to []
-- offset (Optional, int): Defaults to 0.
-- inverted (Optional, bool): Defaults to False.
-<hr/>
+This would publish ??? to ESPHome when it receives:
 
-## Command Schema
+| Data Rx   | 0x02 | 0x01 | 0x01 | 0x02 | 0x00 | CRC  | 0x0D | 0x0A  |
+| -----     | :--: | :--: | :--: | :--: | :--: | :--: | :--: | :---: |
+| Offset    | head | head | 0    | 1    | 2    | 3    | 4    | 5     |
+
+## Configuration variables
+- **data** *(Required, array or string)*: 
+- **mask** *(Optional, array or string)*: Defaults to []
+- **offset** *(Optional, int)*: Defaults to 0.
+- **inverted** *(Optional, bool)*: Defaults to False.
+
+Send a Command
+==============
+
+This sends a command to device and optionally checks for an acknowledgement (ACK) back.
 ```
-packet) 0x02 0x01 0x01 0x02 0x01 (add)checksum 0x0D 0x0A
-packet ack) 0x02 0x01 0xff 0x02 0x01 (add)checksum 0x0D 0x0A
-
-excluding the header, checksum, and footer
+# Example configuration entry
 command: 
-  cmd: [0x01, 0x02, 0x01] or "ascii string"
-  ack: [0xff] or "ascii string"
+  cmd: [0x01, 0x02, 0x01]
+  ack: [0xff]
 ```
-### Configuration variables
-- cmd (Required, array or string): 
-- ack (Optional, array or string): Defaults to []
-<hr/>
 
-## State Num Schema
+This would send to the device via the UART the following data:
+| header | 0x01 | 0x02 | 0x01 | CRC  | footer |
+| :----: | :--: | :--: | :--: | :--: | :--:   |
+
+And will expect back an ACK of:
+| header | 0xff |  CRC  | footer  |
+| :----: | :--: | :---: | :-----: | 
+
+The test for the ACK will be influenced by `tx_delay:`, `tx_timeout:` and `x_retry_cnt:` specified in the `uartex:` section
+
+## Configuration variables
+- **cmd** *(Required, array or string)*: Command to be sent.
+- **ack** *(Optional, array or string)*: ACK to be checked, defaults to [].
+
+
+State Number
+===========
+
+This publishes to ESPHome a number taken from the data block.
 ```
-packet) 0x02 0x01 0x00 0x01 0x02 (add)checksum 0x0D 0x0A
-offset) head head 0    1    2
-
-state_num: 
-  offset: 2
-  length: 1
-  precision: 0
+# Example configuration entry
+sensor:
+  - platform: uartex
+    state_num: 
+    offset: 2
+    length: 1
+    precision: 0
+    signed: false or true (default: true)
+    endian: "big" or "little" (default: big)
+    filters:
+      - multiply: 0.035
 
 value = 0x02 
 ```
+<<<<<<< Updated upstream
 ### Configuration variables
 - offset (Required, int): (0 ~ 128)
 - length (Optional, int): Defaults to 1. (1 ~ 4)
@@ -103,8 +212,26 @@ value = 0x02
 - signed (Optional, bool): Defaults to True. (True, False)
 - endian (Optional, enum): Defaults to "big". ("big", "little")
 <hr/>
+=======
+Receiving this data will publish the value "2.0" to ESPHome:
+>>>>>>> Stashed changes
 
-## uartex.light
+| header | 0x00 | 0x01 | 0x02 | CRC  | footer |
+| :----: | :--: | :--: | :--: | :--: | :--:   |
+
+## Configuration variables
+- **offset** *(Required, int)*: (0 ~ 128) Offset from start of data block, 0 is the first byte after the header.
+- **length** *(Optional, int)*: Defaults to 1. (1 ~ 4) The number of bytes to consume.
+- **precision** *(Optional, int): Defaults to 0. (0 ~ 5). The precision of data read or published :shrug:
+- **signed** *(Optional, bool)*: Defaults to true. Sets the bytes to be processed as signed or unsigned.
+- **endian** *(Optional, enum)*: Defaults to "big". Sets the endian for the bytes to be processed as big endian or little endian.
+
+To Be Completed
+===============
+
+<!--
+uartex.light
+============
 ```
 packet on) 0x02 0x01 0x02 0x03 0x01 (add)checksum 0x0D 0x0A
    offset) head head 0    1    2
@@ -631,3 +758,6 @@ valve:
 - command_update (Optional, command or lambda): 
   - command = (void)
 <hr/>
+-->
+
+The end.
