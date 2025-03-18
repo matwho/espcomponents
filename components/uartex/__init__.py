@@ -3,12 +3,12 @@ import esphome.config_validation as cv
 from esphome.components import uart, text_sensor
 from esphome.components.text_sensor import register_text_sensor
 from esphome import automation, pins, core
-from esphome.const import CONF_ID, CONF_OFFSET, CONF_DATA, \
+from esphome.const import CONF_ID, CONF_OFFSET, CONF_DATA, CONF_TRIGGER_ID, \
     CONF_INVERTED, CONF_VERSION, CONF_NAME, CONF_ICON, CONF_ENTITY_CATEGORY, ICON_NEW_BOX
 from esphome.util import SimpleRegistry
 from .const import CONF_RX_HEADER, CONF_RX_FOOTER, CONF_TX_HEADER, CONF_TX_FOOTER, \
     CONF_RX_CHECKSUM, CONF_TX_CHECKSUM, CONF_RX_CHECKSUM_2, CONF_TX_CHECKSUM_2, \
-    CONF_UARTEX_ID, CONF_ERROR, CONF_LOG, \
+    CONF_UARTEX_ID, CONF_ERROR, CONF_LOG, CONF_ON_TX_TIMEOUT, \
     CONF_ACK, CONF_ON_WRITE, CONF_ON_READ, \
     CONF_STATE, CONF_MASK, \
     CONF_STATE_ON, CONF_STATE_OFF, CONF_COMMAND_ON, CONF_COMMAND_OFF, \
@@ -27,6 +27,9 @@ vector_uint8 = cg.std_vector.template(cg.uint8)
 uint16_const = cg.uint16.operator('const')
 uint8_const = cg.uint8.operator('const')
 uint8_ptr_const = uint8_const.operator('ptr')
+TxTimeoutTrigger = uartex_ns.class_("TxTimeoutTrigger", automation.Trigger.template())
+WriteTrigger = uartex_ns.class_("WriteTrigger", automation.Trigger.template())
+ReadTrigger = uartex_ns.class_("ReadTrigger", automation.Trigger.template())
 
 MULTI_CONF = True
 Checksum = uartex_ns.enum("CHECKSUM")
@@ -98,12 +101,13 @@ def header_schema(value):
 
 COMMAND_SCHEMA = cv.Schema({
     cv.Required(CONF_DATA): validate_hex_data,
-    cv.Optional(CONF_ACK, default=[]): validate_hex_data
+    cv.Optional(CONF_ACK, default=[]): validate_hex_data,
+    cv.Optional(CONF_MASK, default=[]): validate_hex_data
 })
 
 def shorthand_command_hex(value):
     value = validate_hex_data(value)
-    return COMMAND_SCHEMA({CONF_DATA: value, CONF_ACK: []})
+    return COMMAND_SCHEMA({CONF_DATA: value, CONF_ACK: [], CONF_MASK: []})
 
 def command_hex_schema(value):
     if isinstance(value, dict):
@@ -126,6 +130,21 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
         cv.Range(max=core.TimePeriod(milliseconds=2000)),
     ),
     cv.Optional(CONF_TX_RETRY_CNT, default=3): cv.int_range(min=1, max=10),
+    cv.Optional(CONF_ON_TX_TIMEOUT): automation.validate_automation(
+        {
+            cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(TxTimeoutTrigger),
+        }
+    ),    
+    cv.Optional(CONF_ON_WRITE): automation.validate_automation(
+        {
+            cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(WriteTrigger),
+        }
+    ),
+    cv.Optional(CONF_ON_READ): automation.validate_automation(
+        {
+            cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ReadTrigger),
+        }
+    ),
     cv.Optional(CONF_RX_LENGTH): cv.int_range(min=1, max=256),
     cv.Optional(CONF_TX_CTRL_PIN): pins.gpio_output_pin_schema,
     cv.Optional(CONF_RX_HEADER): header_schema,
@@ -136,8 +155,6 @@ CONFIG_SCHEMA = cv.All(cv.Schema({
     cv.Optional(CONF_TX_CHECKSUM): validate_checksum,
     cv.Optional(CONF_RX_CHECKSUM_2): validate_checksum,
     cv.Optional(CONF_TX_CHECKSUM_2): validate_checksum,
-    cv.Optional(CONF_ON_WRITE): cv.lambda_,
-    cv.Optional(CONF_ON_READ): cv.lambda_,
     cv.Optional(CONF_VERSION): text_sensor.TEXT_SENSOR_SCHEMA.extend(
     {
         cv.GenerateID(): cv.declare_id(text_sensor.TextSensor),
@@ -199,6 +216,18 @@ async def to_code(config):
 
     if CONF_TX_RETRY_CNT in config:
         cg.add(var.set_tx_retry_cnt(config[CONF_TX_RETRY_CNT]))
+    
+    for conf in config.get(CONF_ON_TX_TIMEOUT, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)
+
+    for conf in config.get(CONF_ON_WRITE, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(uint8_ptr_const, 'data'), (uint16_const, 'len')], conf)
+
+    for conf in config.get(CONF_ON_READ, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(uint8_ptr_const, 'data'), (uint16_const, 'len')], conf)
 
     if CONF_RX_LENGTH in config:
         cg.add(var.set_rx_length(config[CONF_RX_LENGTH]))
@@ -344,7 +373,11 @@ def command_hex_expression(conf):
     data = conf[CONF_DATA]
     if CONF_ACK in conf:
         ack = conf[CONF_ACK]
-        return data, ack
+        if CONF_MASK in conf:
+            mask = conf[CONF_MASK]
+            return data, ack, mask
+        else:
+            return data, ack
     else:
         return data
     
@@ -357,7 +390,8 @@ async def command_expression(conf):
 @automation.register_action('uartex.write', UARTExWriteAction, cv.maybe_simple_value({
     cv.GenerateID(): cv.use_id(UARTExComponent),
     cv.Required(CONF_DATA): cv.templatable(validate_hex_data),
-    cv.Optional(CONF_ACK, default=[]): validate_hex_data
+    cv.Optional(CONF_ACK, default=[]): validate_hex_data,
+    cv.Optional(CONF_MASK, default=[]): validate_hex_data
 }, key=CONF_DATA))
 
 async def uartex_write_to_code(config, action_id, template_arg, args):
