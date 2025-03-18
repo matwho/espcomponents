@@ -33,7 +33,8 @@ For the read part of the loop this diagram shows the flow, this example uses the
 ![read data flow](docs/uartex_drawing.png)
 
 
-# Base uartex set up
+Base uartex set up
+=============
 
 The read/match/process/reply loop is configured in the `uartex:` section of configuration.
 
@@ -55,47 +56,18 @@ uartex:
   rx_checksum: add
   tx_checksum: add
 ```
-<<<<<<< Updated upstream
-### Configuration variables
-- rx_timeout (Optional, Time): Data Receive Timeout. Defaults to 10ms. Max 2000ms
-- rx_length (Optional, int): The length of the received data when the data length is fixed. Max 256
-- tx_delay (Optional, Time): Data Send Delay. Defaults to 50ms. Max 2000ms
-- tx_timeout (Optional, Time): ACK Reception Timeout. Defaults to 50ms. Max 2000ms
-- tx_retry_cnt (Optional, int): Retry Count on ACK Failure. Defaults to 3. Max 10
-- tx_ctrl_pin (Optional, gpio): Control PIN GPIO
-- rx_header (Optional, array): Header of Data to be Received
-- rx_footer (Optional, array): Footer of Data to be Received
-- tx_header (Optional, array): Header of Data to be Transmitted
-- tx_footer (Optional, array): Header of Data to be Transmitted
-- rx_checksum (Optional, enum, lambda): Checksum of Data to be Received. (add, xor, add_no_header, xor_no_header)
-  - uint8_t = (uint8_t* data, uint16_t len)
-- tx_checksum (Optional, enum, lambda): Checksum of Data to be Transmitted. (add, xor, add_no_header, xor_no_header)
-  - uint8_t = (uint8_t* data, uint16_t len)
-- rx_checksum2 (Optional, enum or lambda): Checksum array of Data to be Received. (add, xor, add_no_header, xor_no_header)
-  - vector\<uint8_t\> = (uint8_t* data, uint16_t len)
-- tx_checksum2 (Optional, enum or lambda): Checksum array of Data to be Transmitted. (add, xor, add_no_header, xor_no_header)
-  - vector\<uint8_t\> = (uint8_t* data, uint16_t len)
-- on_read (Optional, lambda): Event of Data to be Received
-  - void = (uint8_t* data, uint16_t len)
-- on_write (Optional, lambda): Event of Data to be Transmitted
-  - void = (uint8_t* data, uint16_t len)
-- version (Optional): Version of Uartex
-- error (Optional): Error of Uartex
-- log (Optional): Log of Uartex
-<hr/>
-=======
->>>>>>> Stashed changes
-
 ## Configuration variables:
 
-- **rx_timeout** *(Optional, [Time](https://esphome.io/guides/configuration-types#config-time))*: Data Receive Timeout. Defaults to 10ms. Max 2000ms
-- **rx_length** *(Optional, int)*: The length of the received data, to use when the data length is fixed. Max 256
+- **rx_timeout** *(Optional, [Time](https://esphome.io/guides/configuration-types#config-time))*: Data Receive Timeout. Defaults to 10ms. Max 2000ms. The length of time from receving the first byte the component continues receving or waiting for data before processing it. While waiting this component is blocking so use values over 30 ms wth caution.
 
-- **rx_checksum** *(Optional, enum, lambda)*: Checksum method for received data. Possible options are:
+- **rx_length** *(Optional, int)*: The length of the received data, use when the data length is known to be fixed. Max 256
+
+- **rx_checksum** *(Optional, enum, lambda)*: Checksum method for received data, where a single byte is used for the checksum in the data block. The checksum is calculated every time a byte is received if the next byte matches this value it is assumed the end of the data block has been reached and the data is processed.  Possible options are:
   - **add** - use additive CRC calculation
   - **xor** - use xor CRC calculation
-  - **lambda** - you can specify your own CRC calculation, such as this:
+  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a `uint8_t` value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.
     ```
+    # Example configuration entry
     rx_checksum: !lambda |-
       uint32_t crc = 0x02 + 0x01;
       for (int i = 0; i < len; i++)
@@ -104,59 +76,124 @@ uartex:
       }
       return crc & 0x00FF;
     ```
-  - uint8_t = (uint8_t* data, uint16_t len) :shrug:
-- **rx_checksum2** *(Optional, enum or lambda)*: Checksum array of Data to be Received. (add, xor) :shrug:
-  - vector\<uint8_t\> = (uint8_t* data, uint16_t len) :shrug:
+  - 
+- **rx_checksum2** *(Optional, enum or lambda)*: Checksum method for received data, where a 2 bytes are used for the checksum in the data block. The checksum is calculated every time a byte is received if the next 2 bytes matches this value it is assumed the end of the data block has been reached and the data is processed.  Possible options are:
+
+  - **add** - use additive CRC calculation
+
+  - **xor** - use xor CRC calculation
+
+  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a vector\<uint8_t\> value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.
 
 - **rx_header** *(Optional, array)*: Header data required to match in data stream for processing to take place, if no match this data block is ignored.
+
 - **rx_header_mask** *(Optional, array)*: Mask for received header data
 
 - **rx_footer** *(Optional, array)*: Footer of Data to be Received
 
 - **tx_delay** *(Optional, Time)* : Delay before data sent back to device. Defaults to 50ms. Max 2000ms
-- **tx_timeout** *(Optional, Time)* : ACK Reception Timeout. Defaults to 50ms. Max 2000ms
-- **tx_retry_cnt** *(Optional, int)* : Retry Count on ACK. Defaults to 3. Max 10
-- **tx_ctrl_pin** *(Optional, gpio)* : Control PIN GPIO
 
-- **tx_header** *(Optional, array)* : Header added to data to be sent.
-- **tx_footer** *(Optional, array)* : Footer added to data to be sent.
-- **tx_checksum** *(Optional, enum, lambda)* : Checksum added to data to be sent (add, xor)
-  - uint8_t = (uint8_t* data, uint16_t len) :shrug:
-- **tx_checksum2** *(Optional, enum or lambda)* : Checksum added to data to be sent (add, xor) :shrug:
+- **tx_timeout** *(Optional, Time)* : ACK Reception Timeout. Defaults to 50ms. Max 2000ms  This is the time the component waits, before assuming an ACK has not been sent by the device. It tries to send command again for `tx_retry_cnt` number of times before giving up.
+
+- **tx_retry_cnt** *(Optional, int)* Defaults to 3. Max 10: Number of times component will attempt to send data after not receiving an ACK in the time specified by `tx_timeout`
+
+- **tx_ctrl_pin** *(Optional, gpio)* : Control PIN GPIO, some RS485 converter hardware requires a controlling a GPIO pin, this will be set high when transmitting data.
+
+- **tx_header** *(Optional, array)* : Header added to data head of data when sent.
+
+- **tx_footer** *(Optional, array)* : Footer added to end of data to be sent.
+
+- **tx_checksum** *(Optional, enum, lambda)* : Checksum added to data to be sent, where a single byte is used for the checksum at the end of the data block. Possible options are:
+  - **add** - use additive CRC calculation
+  - **xor** - use xor CRC calculation
+  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a `uint8_t` value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.
+
+- **tx_checksum2** *(Optional, enum or lambda)* : Checksum added to data sent, where a 2 bytes are used for the checksum at the end of the data block. Possible options are:
+
+  - **add** - use additive CRC calculation
+
+  - **xor** - use xor CRC calculation
+
+  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a vector\<uint8_t\> value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.
   - vector\<uint8_t\> = (uint8_t* data, uint16_t len) :shrug:
 
-- **on_read** *(Optional, lambda)* : Event when data block read
-  - void = (uint8_t* data, uint16_t len) :shrug:
-- **on_write** *(Optional, lambda)* : Event when data block sent
-  - void = (uint8_t* data, uint16_t len) :shrug:
-- **version** *(Optional)* : Creates a sensor to send version of this component to ESPHome
-- **error** *(Optional)* : Creates a sensor to send error message from this component to ESPHome
-- **log** *(Optional)* : Creates a sensor to send log message from this component to ESPHome
+- **on_read** *(Optional, lambda)* : Event when data block read. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.There is no return value.
+
+- **on_write** *(Optional, lambda)* : Event when data block sent. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array. There is no return value.
+
+- **version** *(Optional)* : Creates a sensor to send the version number  of this component to ESPHome
+- **error** *(Optional)* : Creates a sensor to send error messages from this component to ESPHome
+- **log** *(Optional)* : Creates a sensor to send log message from this component to ESPHome, this includes the raw bytes received from the UART, this is very useful for reverse engineering a data stream.
+
+### Checksum Calculation
+
+The CRC checksum is calculated in the following way:
+```
+    uint16_t crc = 0;
+    switch(checksum)
+    {
+    case CHECKSUM_XOR:
+        for (uint8_t byte : header) { crc ^= byte; }
+        for (uint8_t byte : data) { crc ^= byte; }
+        break;
+    case CHECKSUM_ADD:
+        for (uint8_t byte : header) { crc += byte; }
+        for (uint8_t byte : data) { crc += byte; }
+        break;
+    case CHECKSUM_XOR_NO_HEADER:
+        for (uint8_t byte : data) { crc ^= byte; }
+        break;
+    case CHECKSUM_ADD_NO_HEADER:
+        for (uint8_t byte : data) { crc += byte; }
+        break;
+    }
+    return crc;
+```
+For `tx_checksum` and `rx_checksum` the value used is `crc & 0xFF`.
+For `tx_checksum2` and `rx_checksum2` the value used is 2 bytes `crc >> 8` and  `crc &0xFF`.
 
 
+Uartex Entities
+===============
 
-State Sensor
-============
+The entities that match on and then convert raw data in the data recieved are described bellow. When a packet arrives, it is first parsed by `uartex:` and then distributed to all uartex entities. 
 
-Not sure what this does !!!!!!! :shrug:
+State Matching in all Entities
+=============================
+
+All Uartex entities can have an optional state specified. It is common with RS485 or similar networks to have multiple devices connected to a common serial line. The `state:` is used to identify the device that sent the packet. Only when this matches will the entity process the data, other entities can be specified that may match this state and these will also be checked and processed. This allows different entities to be configured to respond to different devices on an RS484 network.
+
+An entity specified without `state:` will match on every data block received. 
+```
+# Example configuration entry for a sensor with state matching
+sensor:
+  - platform: uartex
+    state: 
+      data: [0x01, 0x02]
+      mask: [0xff, 0xff]
+      offset: 0
+      inverted: False
+    ...
+```
+or in a short form:
 ```
 # Example configuration entry
-state: 
-  data: [0x01, 0x02] or "ascii string"
-  mask: [0xff, 0xff] or "ascii string"
-  offset: 0
-  inverted: False
+sensor:
+  - platform: uartex
+    state: [0x01, 0x02]
+    ...
 ```
-This would publish ??? to ESPHome when it receives:
+
+If the data packet matches the `data:`, the entity proceeds to process the raw data, otherwise it ignores this data. So with this example, the entity will process the data:
 
 | Data Rx   | 0x02 | 0x01 | 0x01 | 0x02 | 0x00 | CRC  | 0x0D | 0x0A  |
 | -----     | :--: | :--: | :--: | :--: | :--: | :--: | :--: | :---: |
 | Offset    | head | head | 0    | 1    | 2    | 3    | 4    | 5     |
 
 ## Configuration variables
-- **data** *(Required, array or string)*: 
+- **data** *(Required, array or string)*: The value or values used to match in the data, for example [0x01, 0x02] or "\r\n"
 - **mask** *(Optional, array or string)*: Defaults to []
-- **offset** *(Optional, int)*: Defaults to 0.
+- **offset** *(Optional, int)*: Defaults to 0. The first byte after the header has index 0.
 - **inverted** *(Optional, bool)*: Defaults to False.
 
 Send a Command
@@ -178,15 +215,15 @@ And will expect back an ACK of:
 | header | 0xff |  CRC  | footer  |
 | :----: | :--: | :---: | :-----: | 
 
-The test for the ACK will be influenced by `tx_delay:`, `tx_timeout:` and `x_retry_cnt:` specified in the `uartex:` section
+The test for the ACK will be influenced by `tx_delay:`, `tx_timeout:` and `tx_retry_cnt:` specified in the `uartex:` section
 
 ## Configuration variables
 - **cmd** *(Required, array or string)*: Command to be sent.
 - **ack** *(Optional, array or string)*: ACK to be checked, defaults to [].
 
 
-State Number
-===========
+State Number Sensor
+===================
 
 This publishes to ESPHome a number taken from the data block.
 ```
@@ -197,27 +234,19 @@ sensor:
     offset: 2
     length: 1
     precision: 0
-    signed: false or true (default: true)
-    endian: "big" or "little" (default: big)
+    signed: false
+    endian: "big"
     filters:
       - multiply: 0.035
 
 value = 0x02 
 ```
-<<<<<<< Updated upstream
-### Configuration variables
-- offset (Required, int): (0 ~ 128)
-- length (Optional, int): Defaults to 1. (1 ~ 4)
-- precision (Optional, int): Defaults to 0. (0 ~ 5)
-- signed (Optional, bool): Defaults to True. (True, False)
-- endian (Optional, enum): Defaults to "big". ("big", "little")
-<hr/>
-=======
-Receiving this data will publish the value "2.0" to ESPHome:
->>>>>>> Stashed changes
+With this data received:
 
 | header | 0x00 | 0x01 | 0x02 | CRC  | footer |
 | :----: | :--: | :--: | :--: | :--: | :--:   |
+
+This sensor will sends the value 2.0*0.035 = 0.07 to ESPHome.
 
 ## Configuration variables
 - **offset** *(Required, int)*: (0 ~ 128) Offset from start of data block, 0 is the first byte after the header.
@@ -225,6 +254,61 @@ Receiving this data will publish the value "2.0" to ESPHome:
 - **precision** *(Optional, int): Defaults to 0. (0 ~ 5). The precision of data read or published :shrug:
 - **signed** *(Optional, bool)*: Defaults to true. Sets the bytes to be processed as signed or unsigned.
 - **endian** *(Optional, enum)*: Defaults to "big". Sets the endian for the bytes to be processed as big endian or little endian.
+
+Binary Sensor
+=============
+
+This binary sensor will check a byte within the received data block. The mask can be used to test for a specific bit within that byte.
+
+```
+# Example configuration entry
+binary_sensor:
+  - platform: uartex
+    name: Binary_Sensor1
+    state: [0x02, 0x03]
+    state_on:
+      offset: 2
+      data: [0x01]
+    state_off:
+      offset: 2
+      data: [0x00]
+```
+With this data received the sensor will report 'on'
+
+| header | 0x02 | 0x03 | 0x01 | CRC  | footer |
+| :----: | :--: | :--: | :--: | :--: | :--:   |
+
+With this data received the sensor will report 'off'
+
+| header | 0x02 | 0x03 | 0x00 | CRC  | footer |
+| :----: | :--: | :--: | :--: | :--: | :--:   |
+
+### Configuration variables
+- **state** *(Optional, state)*: The value matched wiuth the byte within the  
+- state_on (Required, state): 
+- state_off (Required, state): 
+- command_update (Optional, command or lambda): 
+  - command = (void)
+<hr/>
+
+## uartex.button
+```
+packet on) 0x02 0x01 0x02 0x03 0x01 (add)checksum 0x0D 0x0A
+   offset) head head 0    1    2
+
+button:
+  - platform: uartex
+    name: "Elevator Call"
+    icon: "mdi:elevator"
+    command_on: 
+      data: [0x02, 0x03, 0x01]
+```
+### Configuration variables
+- command_on (Required, command or lambda): 
+  - command = (void)
+<hr/>
+
+
 
 To Be Completed
 ===============
@@ -274,47 +358,8 @@ light:
   - command = (void)
 <hr/>
 
-## uartex.binary_sensor
-```
-packet on) 0x02 0x01 0x02 0x03 0x01 (add)checksum 0x0D 0x0A
-   offset) head head 0    1    2
-packet off) 0x02 0x01 0x02 0x03 0x00 (add)checksum 0x0D 0x0A
 
-binary_sensor:
-  - platform: uartex
-    name: Binary_Sensor1
-    state: [0x02, 0x03]
-    state_on:
-      offset: 2
-      data: [0x01]
-    state_off:
-      offset: 2
-      data: [0x00]
-```
-### Configuration variables
-- state (Optional, state): 
-- state_on (Required, state): 
-- state_off (Required, state): 
-- command_update (Optional, command or lambda): 
-  - command = (void)
-<hr/>
 
-## uartex.button
-```
-packet on) 0x02 0x01 0x02 0x03 0x01 (add)checksum 0x0D 0x0A
-   offset) head head 0    1    2
-
-button:
-  - platform: uartex
-    name: "Elevator Call"
-    icon: "mdi:elevator"
-    command_on: 
-      data: [0x02, 0x03, 0x01]
-```
-### Configuration variables
-- command_on (Required, command or lambda): 
-  - command = (void)
-<hr/>
 
 ## uartex.climate
 ```
@@ -735,7 +780,7 @@ valve:
       data: [0x01]
     state_closed:
       offset: 2
-      data: [0x00]
+      data: [0x00]˚
     command_open:
       data: [0x02, 0x03, 0x01]
       ack: [0x02, 0x13, 0x01]
