@@ -114,8 +114,7 @@ uartex:
 
   - **xor** - use xor CRC calculation
 
-  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a vector\<uint8_t\> value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.
-  - vector\<uint8_t\> = (uint8_t* data, uint16_t len) :shrug:
+  - **lambda** - you can specify your own CRC calculation. The lambda is expected to return a vector\<uint8_t\> value. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array
 
 - **on_read** *(Optional, lambda)* : Event when data block read. Two variables are set up `uint8_t* data` an array of all the data in the block not including the header data & `uint16_t len` the length of the data array.There is no return value.
 
@@ -250,8 +249,8 @@ This sensor will sends the value 2.0*0.035 = 0.07 to ESPHome.
 
 ## Configuration variables
 - **offset** *(Required, int)*: (0 ~ 128) Offset from start of data block, 0 is the first byte after the header.
-- **length** *(Optional, int)*: Defaults to 1. (1 ~ 4) The number of bytes to consume.
-- **precision** *(Optional, int): Defaults to 0. (0 ~ 5). The precision of data read or published :shrug:
+- **length** *(Optional, int)*: Defaults to 1. (1 ~ 4) The number of bytes to consume from the data received.
+- **precision** *(Optional, int): Defaults to 0. (0 ~ 5). The number of decimal places used to publish data to ESPHome.
 - **signed** *(Optional, bool)*: Defaults to true. Sets the bytes to be processed as signed or unsigned.
 - **endian** *(Optional, enum)*: Defaults to "big". Sets the endian for the bytes to be processed as big endian or little endian.
 
